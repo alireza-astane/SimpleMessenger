@@ -1,20 +1,26 @@
 import os
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Depends, HTTPException, status, Form
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    status,
+    Form,
+    WebSocket,
+    WebSocketDisconnect,
+    Query,
+    Request,
+)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from jose import JWTError, jwt  # pip install python-jose[cryptography]
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from fastapi import Request
-from fastapi.templating import Jinja2Templates
 from database import engine, SessionLocal
-from datetime import datetime
 from models import Base, User, Chat, Message
 import logging
 import uvicorn
-from fastapi import WebSocket, WebSocketDisconnect
-from fastapi import Query
 import json
 from cache import redis_client
 
@@ -92,9 +98,6 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 
-# ---------------- OAuth2 Token Endpoints ----------------
-
-
 # Endpoint to obtain a token using username and password
 @app.post("/token")
 async def login_for_access_token(
@@ -112,9 +115,6 @@ async def login_for_access_token(
         data={"sub": user.username, "id": user.id}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
-
-
-# ---------------- Remaining Endpoints ----------------
 
 
 # Serve the welcome page
@@ -419,54 +419,3 @@ async def chat_websocket(
             await manager.broadcast(chat_id, data)
     except WebSocketDisconnect:
         manager.disconnect(chat_id, websocket)
-
-
-# @app.websocket("/ws/chat/{chat_id}")
-# async def chat_websocket(
-#     websocket: WebSocket, chat_id: str, token: str = Depends(get_token)
-# ):
-#     # You could also decode the token here to validate the user
-#     await manager.connect(chat_id, websocket)
-#     try:
-#         while True:
-#             # Optionally, receive a message from the client (e.g. for typing notifications)
-#             await websocket.receive_text()
-#     except WebSocketDisconnect:
-#         manager.disconnect(chat_id, websocket)
-
-
-# @app.post("/chat/{chat_id}/message")
-# async def send_message(
-#     chat_id: str,
-#     message: str = Form(...),
-#     token: str = Depends(get_token),
-#     db: Session = Depends(get_db),
-# ):
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-#         user_id: int = payload.get("id")
-#         if user_id is None:
-#             raise HTTPException(status_code=401, detail="Invalid token")
-#     except JWTError:
-#         raise HTTPException(status_code=401, detail="Invalid token")
-
-#     # Verify the user participates in the chat
-#     chat = db.query(Chat).filter(Chat.id == chat_id).first()
-#     if not chat or not any(user.id == user_id for user in chat.users):
-#         raise HTTPException(status_code=403, detail="Access denied to this chat")
-
-#     # Create and save the new message
-#     new_message = Message(
-#         chat_id=chat_id,
-#         sender_id=user_id,
-#         sent_datetime=datetime.now(),
-#         text=message,
-#     )
-#     db.add(new_message)
-#     # Update chat's last_message_datetime
-#     chat.last_message_datetime = datetime.now()
-#     db.commit()
-#     db.refresh(new_message)
-
-#     await manager.broadcast(chat_id, message)
-#     return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)
