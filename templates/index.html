@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Login</title>
+        <link rel="stylesheet" type="text/css" href="css/styles.css">
+    </head>
+    <body>
+        <h1>Login</h1>
+        <form id="loginForm" action="" onsubmit="handleLogin(event)">
+            <div>
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        <script>
+            function handleLogin(event) {
+                event.preventDefault();
+                var username = document.getElementById("username").value;
+                var password = document.getElementById("password").value;
+                
+                // Here you would typically send the credentials to the server for validation
+                console.log("Username:", username);
+                console.log("Password:", password);
+                
+                // Redirect to the chat interface after successful login (this is just a placeholder)
+                window.location.href = "index.html";
+            }
+        </script>
+    </body>
+</html>

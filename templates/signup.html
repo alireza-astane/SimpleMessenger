@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Sign Up</title>
+    <style>
+      #notification {
+        color: red;
+        margin-bottom: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sign Up</h1>
+    <p id="notification"></p>
+    <form action="/signup" method="post">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" required/><br/>
+      
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" required/><br/>
+      
+      <label for="confirm_password">Confirm Password:</label>
+      <input type="password" id="confirm_password" name="confirm_password" required/><br/>
+      
+      <button type="submit">Sign Up</button>
+    </form>
+    <p>Already have an account? <a href="/login">Login</a></p>
+    
+    <script>
+      // Read the 'error' query param and display it
+      const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get('error');
+      if (error) {
+        const notification = document.getElementById("notification");
+        notification.textContent = decodeURIComponent(error);
+      }
+    </script>
+  </body>
+</html>
