@@ -13,6 +13,10 @@ from datetime import datetime
 from models import Base, User, Chat, Message
 import logging
 import uvicorn
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import Query
+import json
+from cache import redis_client
 
 LOG = logging.getLogger("uvicorn.error")
 LOG.info("API is starting up")
@@ -340,36 +344,119 @@ async def create_chat(
     return RedirectResponse(url=f"/chat/{new_chat.id}", status_code=303)
 
 
-@app.post("/chat/{chat_id}/message")
-async def send_message(
+# A simple connection manager for chat websockets
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, list[WebSocket]] = {}
+
+    async def connect(self, chat_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if chat_id not in self.active_connections:
+            self.active_connections[chat_id] = []
+        self.active_connections[chat_id].append(websocket)
+
+    def disconnect(self, chat_id: str, websocket: WebSocket):
+        if chat_id in self.active_connections:
+            self.active_connections[chat_id].remove(websocket)
+
+    async def broadcast(self, chat_id: str, message: str):
+        if chat_id in self.active_connections:
+            for connection in self.active_connections[chat_id]:
+                await connection.send_text(message)
+
+
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/chat/{chat_id}")
+async def chat_websocket(
+    websocket: WebSocket,
     chat_id: str,
-    message: str = Form(...),
-    token: str = Depends(get_token),
+    token: str = Query(...),
     db: Session = Depends(get_db),
 ):
     try:
+        # Decode the token to extract user information
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("id")
-        if user_id is None:
+        active_user_id: int = payload.get("id")
+        if active_user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     # Verify the user participates in the chat
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
-    if not chat or not any(user.id == user_id for user in chat.users):
+    if not chat or not any(user.id == active_user_id for user in chat.users):
         raise HTTPException(status_code=403, detail="Access denied to this chat")
 
-    # Create and save the new message
-    new_message = Message(
-        chat_id=chat_id,
-        sender_id=user_id,
-        sent_datetime=datetime.now(),
-        text=message,
-    )
-    db.add(new_message)
-    # Update chat's last_message_datetime
-    chat.last_message_datetime = datetime.now()
-    db.commit()
-    db.refresh(new_message)
-    return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)
+    await manager.connect(chat_id, websocket)
+    try:
+        while True:
+            # Wait for client to send a message
+            data = await websocket.receive_text()
+
+            # Store the message in the database
+            new_message = Message(
+                chat_id=chat_id,
+                sender_id=active_user_id,
+                sent_datetime=datetime.now(),
+                text=data,
+            )
+            db.add(new_message)
+            db.commit()
+
+            # Broadcast the new message to all connected clients in the chat
+            await manager.broadcast(chat_id, data)
+    except WebSocketDisconnect:
+        manager.disconnect(chat_id, websocket)
+
+
+# @app.websocket("/ws/chat/{chat_id}")
+# async def chat_websocket(
+#     websocket: WebSocket, chat_id: str, token: str = Depends(get_token)
+# ):
+#     # You could also decode the token here to validate the user
+#     await manager.connect(chat_id, websocket)
+#     try:
+#         while True:
+#             # Optionally, receive a message from the client (e.g. for typing notifications)
+#             await websocket.receive_text()
+#     except WebSocketDisconnect:
+#         manager.disconnect(chat_id, websocket)
+
+
+# @app.post("/chat/{chat_id}/message")
+# async def send_message(
+#     chat_id: str,
+#     message: str = Form(...),
+#     token: str = Depends(get_token),
+#     db: Session = Depends(get_db),
+# ):
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+#         user_id: int = payload.get("id")
+#         if user_id is None:
+#             raise HTTPException(status_code=401, detail="Invalid token")
+#     except JWTError:
+#         raise HTTPException(status_code=401, detail="Invalid token")
+
+#     # Verify the user participates in the chat
+#     chat = db.query(Chat).filter(Chat.id == chat_id).first()
+#     if not chat or not any(user.id == user_id for user in chat.users):
+#         raise HTTPException(status_code=403, detail="Access denied to this chat")
+
+#     # Create and save the new message
+#     new_message = Message(
+#         chat_id=chat_id,
+#         sender_id=user_id,
+#         sent_datetime=datetime.now(),
+#         text=message,
+#     )
+#     db.add(new_message)
+#     # Update chat's last_message_datetime
+#     chat.last_message_datetime = datetime.now()
+#     db.commit()
+#     db.refresh(new_message)
+
+#     await manager.broadcast(chat_id, message)
+#     return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)
