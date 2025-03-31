@@ -270,22 +270,31 @@ async def chat_page(
         .all()
     )
     # Build message data with sender username (assumes Message model has sender_id and text)
-    message_data = []
-    for msg in messages_query:
-        sender = db.query(User).filter(User.id == msg.sender_id).first()
-        message_data.append(
-            {
-                "sender": sender.username if sender else "Unknown",
-                "sent_datetime": (
-                    msg.sent_datetime.strftime("%Y-%m-%d %H:%M:%S")
-                    if msg.sent_datetime
-                    else ""
-                ),
-                "text": msg.text,
-            }
-        )
 
-    # Pass chat_id for use in form submission
+    cache_key = f"chat:{chat_id}:messages"
+    cached_messages = await redis_client.get(cache_key)
+
+    if cached_messages:
+        message_data = json.loads(cached_messages)
+    else:
+        # Your existing logic to build message_data from the DB
+        message_data = []
+        for msg in messages_query:
+            sender = db.query(User).filter(User.id == msg.sender_id).first()
+            message_data.append(
+                {
+                    "sender": sender.username if sender else "Unknown",
+                    "sent_datetime": (
+                        msg.sent_datetime.strftime("%Y-%m-%d %H:%M:%S")
+                        if msg.sent_datetime
+                        else ""
+                    ),
+                    "text": msg.text,
+                }
+            )
+    # Cache the messages for 5 minutes (300 seconds)
+    await redis_client.set(cache_key, json.dumps(message_data), ex=300)
+
     return templates.TemplateResponse(
         "chat.html",
         {
@@ -404,6 +413,7 @@ async def chat_websocket(
             )
             db.add(new_message)
             db.commit()
+            await redis_client.delete(f"chat:{chat_id}:messages")
 
             # Broadcast the new message to all connected clients in the chat
             await manager.broadcast(chat_id, data)
