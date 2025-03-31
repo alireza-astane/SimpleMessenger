@@ -40,7 +40,6 @@ class Message(Base):
     chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     sent_datetime = Column(DateTime)
-    message_time = Column(String)
     text = Column(Text)
     # Relationship to chat
     chat = relationship("Chat", back_populates="messages")

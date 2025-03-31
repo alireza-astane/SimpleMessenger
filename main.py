@@ -110,25 +110,6 @@ async def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-# Example protected endpoint – requires a valid token
-@app.get("/users/me")
-async def read_users_me(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        user_id: int = payload.get("id")
-        if username is None or user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    return {"username": user.username, "id": user.id}
-
-
 # ---------------- Remaining Endpoints ----------------
 
 
@@ -150,7 +131,7 @@ async def signup_page():
     return FileResponse(os.path.join(BASE_DIR, "templates/signup.html"))
 
 
-# (Optional) Process signup form submissions if needed
+# Process signup form submissions if needed
 @app.post("/signup")
 async def process_signup(
     username: str = Form(...),
@@ -222,7 +203,6 @@ async def chats_page(
         LOG.error("not found")
         raise HTTPException(status_code=401, detail="User not found")
 
-    # Assume Chat model exists with 'participants' relationship and last_message_time field.
     chats = (
         db.query(Chat)
         .filter(Chat.users.any(id=user_id))
