@@ -11,6 +11,12 @@ from fastapi import (
     Query,
     Request,
 )
+from models_mongo import (
+    UserModel,
+    ChatModel,
+    MessageModel,
+    UserChatsModel,
+)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -23,6 +29,16 @@ import logging
 import uvicorn
 import json
 from cache import redis_client
+from mongodb import users_collection, messages_collection, user_chats_collection
+from fastapi import FastAPI, Request
+from mongodb import (
+    users_collection,
+    chats_collection,
+    messages_collection,
+    user_chats_collection,
+)
+from models_mongo import UserModel, ChatModel, MessageModel  # Your Pydantic models
+
 
 LOG = logging.getLogger("uvicorn.error")
 LOG.info("API is starting up")
@@ -31,7 +47,22 @@ LOG.info(uvicorn.Config.asgi_version)
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
+
+async def create_indexes():
+    await users_collection.create_index("username", unique=True)
+    await messages_collection.create_index([("chat_id", 1), ("sent_datetime", 1)])
+    await user_chats_collection.create_index("user_id")
+
+
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup_event():
+    # Create MongoDB indexes on startup
+    await create_indexes()
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # OAuth2 and JWT settings
