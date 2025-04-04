@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: messenger_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongodb
+      - kafka
+      - redis
+    environment:
+      - MONGO_DETAILS=mongodb://mongodb:27017/?uuidRepresentation=standard
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  consumer:
+    build: .
+    container_name: messenger_consumer
+    command: python consumer.py
+    depends_on:
+      - mongodb
+      - kafka
+    environment:
+      - MONGO_DETAILS=mongodb://mongodb:27017/?uuidRepresentation=standard
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+
+  mongodb:
+    image: mongo:5
+    container_name: messenger_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7
+    container_name: messenger_redis
+    ports:
+      - "6379:6379"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+
+volumes:
+  mongo_data:
