@@ -12,7 +12,7 @@ from fastapi import (
     Request,
 )
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from jose import JWTError, jwt  # pip install python-jose[cryptography]
 from passlib.context import CryptContext
@@ -31,6 +31,7 @@ from models_mongo import UserModel, ChatModel, MessageModel, UserChatsModel
 LOG = logging.getLogger("uvicorn.error")
 LOG.info("API is starting up")
 LOG.info(uvicorn.Config.asgi_version)
+from uuid import UUID
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -157,6 +158,7 @@ async def process_signup(
         username=username, password=hashed_password
     )  ### user already exist ?
     await users_collection.insert_one(user.dict())
+    # LOG.info(f"User {user.dict()} created successfully.")
     return RedirectResponse(url="/login", status_code=303)
 
 
@@ -177,12 +179,12 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         data={"sub": user.get("username"), "id": str(user.get("id"))},
         expires_delta=access_token_expires,
     )
+    # LOG.info(f"User {user.get('username')} logged in successfully.")
     response = RedirectResponse(url="/chats", status_code=303)
     response.set_cookie(key="access_token", value=access_token, httponly=True)
     return response
 
 
-# Chats page using MongoDB (example: list chats for a user)
 @app.get("/chats")
 async def chats_page(request: Request):
     token = get_token_from_request(request)
@@ -193,44 +195,45 @@ async def chats_page(request: Request):
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    # Query user_chats collection to get chats for this user
-    cursor = user_chats_collection.find({"user_id": user_id})
+
+    # Query user_chats collection for this user’s chats
+    cursor = user_chats_collection.find({"user_id": UUID(user_id)})
     user_chats = await cursor.to_list(length=100)
-    # For each chat, you might want to retrieve additional chat details as needed. #TODO
-    return templates.TemplateResponse(
-        "chats.html", {"request": request, "chats": user_chats}
-    )
+    chat_ids = [user_chat.get("chat_id") for user_chat in user_chats]
 
+    chat_data = []
+    for chat_id in chat_ids:
+        # Retrieve the chat document
+        chat = await chats_collection.find_one({"id": chat_id})
+        if not chat:
+            continue
+        # Get the last message (sorted descending by sent_datetime)
+        last_message = await messages_collection.find_one(
+            {"chat_id": chat_id}, sort=[("sent_datetime", -1)]
+        )
+        # Determine other participant(s) username(s)
+        other_usernames = []
+        for participant in chat.get("participants", []):
+            if str(participant) != str(user_id):
+                user_doc = await users_collection.find_one({"id": participant})
+                if user_doc and user_doc.get("username"):
+                    other_usernames.append(user_doc.get("username"))
+        name = ", ".join(other_usernames) if other_usernames else "Unknown"
 
-# Example: serve an individual chat page (this uses SQLAlchemy in your old version;
-# here you would query MongoDB for chat details and messages)
-@app.get("/chat/{chat_id}")
-async def chat_page(chat_id: str, request: Request):
-    token = get_token_from_request(request)
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    # Retrieve chat details and messages from MongoDB
-    chat = await chats_collection.find_one({"id": chat_id})
-    if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
-    # Fetch messages for the chat
-    cursor = messages_collection.find({"chat_id": chat_id}).sort("sent_datetime", 1)
-    messages = await cursor.to_list(length=100)
-    # Determine other participant's name (requires additional query if needed)
-    other_user_name = "Unknown"  # update this as required
+        chat_data.append(
+            {
+                "id": str(chat.get("id")),
+                "name": name,
+                "last_message": last_message,  # Expect last_message to be a dict (or None)
+                "last_message_time": chat.get("last_message_datetime"),
+            }
+        )
+
+        # Sort chats by last_message_time in descending order
+        chat_data.sort(key=lambda x: x["last_message_time"], reverse=True)
+
     return templates.TemplateResponse(
-        "chat.html",
-        {
-            "request": request,
-            "chat_id": chat_id,
-            "other_user_name": other_user_name,
-            "messages": messages,
-        },
+        "chats.html", {"request": request, "chats": chat_data}
     )
 
 
@@ -247,13 +250,13 @@ async def create_chat(
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    LOG.error("here 4")
 
     # Check if recipient exists
     recipient = await users_collection.find_one({"username": recipient_username})
     if not recipient:
         return RedirectResponse(url="/chats?error=Recipient+not+found", status_code=303)
     recipient_id = str(recipient.get("id"))
+    # LOG.info(f"Recipient ID: {recipient}")
     # Check if chat already exists
     existing_chat = await chats_collection.find_one(
         {"participants": {"$all": [creator_id, recipient_id]}}
@@ -276,66 +279,170 @@ async def create_chat(
         participants=participants,
     )
     result = await chats_collection.insert_one(chat.dict())
+
     chat_id = str(result.inserted_id)
 
     # Add chat entries for each participant
     for participant in participants:
-        user_chat = UserChatsModel(user_id=participant, chat_id=chat_id)
+        user_chat = UserChatsModel(
+            user_id=participant,
+            chat_id=chat.id,
+            last_message_datetime=chat.last_message_datetime,
+        )
         await user_chats_collection.insert_one(user_chat.dict())
 
-    return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)
+    return RedirectResponse(url=f"/chat/{chat.id}", status_code=303)
 
 
-# Websocket endpoint remains largely similar (if you still plan to use SQL-based logic for websockets,
-# you might also update this to store messages in MongoDB)
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[str, list[WebSocket]] = {}
+# # Example: serve an individual chat page (this uses SQLAlchemy in your old version;
+# # here you would query MongoDB for chat details and messages)
+# @app.get("/chat/{chat_id}")
+# async def chat_page(chat_id: str, request: Request):
+#     token = get_token_from_request(request)
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+#         user_id = payload.get("id")
+#         if user_id is None:
+#             raise HTTPException(status_code=401, detail="Invalid token")
+#     except JWTError:
+#         raise HTTPException(status_code=401, detail="Invalid token")
+#     # Retrieve chat details and messages from MongoDB
 
-    async def connect(self, chat_id: str, websocket: WebSocket):
-        await websocket.accept()
-        if chat_id not in self.active_connections:
-            self.active_connections[chat_id] = []
-        self.active_connections[chat_id].append(websocket)
+#     # get all chats in database
+#     # cursor = chats_collection.find()
+#     # all_chats = await cursor.to_list(length=100)
+#     # LOG.info(f"{len(all_chats)}All chats: {all_chats} ")
+#     chat = await chats_collection.find_one({"id": UUID(chat_id)})
+#     # LOG.info(f"Chat: {chat} ")
 
-    def disconnect(self, chat_id: str, websocket: WebSocket):
-        if chat_id in self.active_connections:
-            self.active_connections[chat_id].remove(websocket)
+#     if not chat:
+#         raise HTTPException(status_code=404, detail="Chat not found")
+#     # Fetch messages for the chat
+#     cursor = messages_collection.find({"chat_id": UUID(chat_id)}).sort(
+#         "sent_datetime", 1
+#     )
+#     messages = await cursor.to_list(length=100)
+#     LOG.info(messages)
+#     # Determine other participant's name (requires additional query if needed)
 
-    async def broadcast(self, chat_id: str, message: str):
-        if chat_id in self.active_connections:
-            for connection in self.active_connections[chat_id]:
-                await connection.send_text(message)
+#     participants = chat.get("participants")
+#     if len(participants) < 2:
+#         raise HTTPException(status_code=400, detail="Not enough participants in chat")
+
+#     for participant in participants:
+#         # LOG.info(f"Participant: {str(participant),user_id } ")
+#         if str(participant) != user_id:
+#         other_user_id = participant
+#         break
+
+# other_user = await users_collection.find_one({"id": other_user_id})
+# if other_user:
+#     other_user_name = other_user.get("username")
+# else:
+#     # Fallback if user not found
+#     LOG.error(f"User with ID {other_user_id} not found.")
+
+# return templates.TemplateResponse(
+#     "chat.html",
+#     {
+#         "request": request,
+#         "chat_id": chat_id,
+#         "other_user_name": other_user_name,
+#         "messages": messages,
+#     },
+# )
 
 
-manager = ConnectionManager()
-
-
-@app.websocket("/ws/chat/{chat_id}")
-async def chat_websocket(websocket: WebSocket, chat_id: str, token: str = Query(...)):
+@app.get("/chat/{chat_id}", response_class=HTMLResponse)
+async def chat_page(chat_id: str, request: Request):
+    token = get_token_from_request(request)
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        active_user_id = payload.get("id")
-        if active_user_id is None:
+        user_id = payload.get("id")
+        if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    # (Additional MongoDB-based permission checks may be needed here)
-    await manager.connect(chat_id, websocket)
+
+    # Verify that the chat exists and the user is a participant.
+    chat = await chats_collection.find_one({"id": UUID(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    participants = chat.get("participants", [])
+    if str(user_id) not in [str(p) for p in participants]:
+        raise HTTPException(status_code=403, detail="Access denied to this chat")
+
+    # Retrieve messages sorted by sent_datetime.
+    cursor = messages_collection.find({"chat_id": UUID(chat_id)}).sort(
+        "sent_datetime", 1
+    )
+    messages = await cursor.to_list(length=100)
+
+    # Enrich each message with sender details.
+    for msg in messages:
+        # Look up the sender document based on sender_id.
+        sender = await users_collection.find_one({"id": msg["sender_id"]})
+        if sender:
+            # Assume sender document has a "username" field.
+            msg["sender"] = sender
+        else:
+            msg["sender"] = {"username": "Unknown"}
+
+    # Determine the other user's name (for a 2-person chat).
+    other_user_name = "Unknown"
+    for p in participants:
+        if str(p) != str(user_id):
+            other_user = await users_collection.find_one({"id": p})
+            if other_user:
+                other_user_name = other_user.get("username", "Unknown")
+            break
+
+    return templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "chat_id": chat_id,
+            "other_user_name": other_user_name,
+            "messages": messages,
+            "token": token,
+        },
+    )
+
+
+@app.post("/chat/{chat_id}/message")
+async def post_message(chat_id: str, message: str = Form(...), request: Request = None):
+    token = get_token_from_request(request)
     try:
-        while True:
-            data = await websocket.receive_text()
-            # Store the message in MongoDB
-            message = MessageModel(
-                chat_id=chat_id,
-                sender_id=active_user_id,
-                sent_datetime=datetime.now(),
-                text=data,
-            )
-            await messages_collection.insert_one(message.dict())
-            # Delete Redis cache if used
-            await redis_client.delete(f"chat:{chat_id}:messages")
-            # Broadcast to connected clients
-            await manager.broadcast(chat_id, data)
-    except WebSocketDisconnect:
-        manager.disconnect(chat_id, websocket)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("id")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Verify that the user participates in the chat
+    chat = await chats_collection.find_one({"id": UUID(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    participants = chat.get("participants", [])
+    if str(user_id) not in [str(p) for p in participants]:
+        raise HTTPException(status_code=403, detail="Access denied to this chat")
+
+    # Create a new message using the MessageModel and insert it into MongoDB
+    new_message = MessageModel(
+        chat_id=chat_id,
+        sender_id=user_id,
+        sent_datetime=datetime.now(),
+        text=message,
+    )
+    await messages_collection.insert_one(new_message.dict())
+
+    # Update the chat's last_message_datetime if needed
+    await chats_collection.update_one(
+        {"id": UUID(chat_id)}, {"$set": {"last_message_datetime": datetime.now()}}
+    )
+
+    # Invalidate the Redis cache for this chat’s messages if applicable
+    await redis_client.delete(f"chat:{chat_id}:messages")
+
+    return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)

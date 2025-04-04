@@ -1,131 +1,75 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Chat with {{ other_user_name }}</title>
-    <style>
-        /* Basic styling */
-        #messages {
-            border: 1px solid #ccc;
-            height: 400px;
-            overflow-y: scroll;
-            padding: 10px;
-        }
-        .message {
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Chat with {{ other_user_name }}</h1>
-    <div id="messages">
-        {% for msg in messages %}
-            <div class="message">
-                <strong>{{ msg.sender }}:</strong> {{ msg.text }}
-                <br>
-                <small>{{ msg.sent_datetime }}</small>
-            </div>
-        {% endfor %}
-    </div>
-
-    <form id="sendMessageForm" method="post" action="/chat/{{ chat_id }}/message">
-        <input type="text" name="message" placeholder="Type a message" required>
-        <button type="submit">Send</button>
-    </form>
-
-    <script>
-        // Open a websocket connection for this chat
-        const chatId = "{{ chat_id }}";
-        const ws = new WebSocket(`ws://${window.location.host}/ws/chat/${chatId}`);
-
-        ws.onmessage = function(event) {
-            // Append the received message to the messages div
-            const messagesDiv = document.getElementById("messages");
-            const newMsgDiv = document.createElement("div");
-            newMsgDiv.classList.add("message");
-            // You might later adjust to include sender info if sending JSON from the server
-            newMsgDiv.innerHTML = `<strong>New message:</strong> ${event.data}`;
-            messagesDiv.appendChild(newMsgDiv);
-            // Scroll to the bottom
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        };
-
-        ws.onerror = function(event) {
-            console.error("WebSocket error observed:", event);
-        };
-    </script>
-</body>
-</html> -->
-
-
-
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8">
     <title>Chat with {{ other_user_name }}</title>
     <style>
-        #messages {
-            border: 1px solid #ccc;
-            height: 400px;
-            overflow-y: scroll;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-        .message {
-            margin-bottom: 10px;
-        }
+      body {
+        background: #f9f9f9;
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      a.back {
+        text-decoration: none;
+        margin-bottom: 10px;
+        display: inline-block;
+        font-weight: bold;
+      }
+      h1 {
+        margin-bottom: 20px;
+      }
+      #messages {
+        border: 1px solid #ccc;
+        background: #fff;
+        height: 400px;
+        overflow-y: auto;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .message {
+        margin-bottom: 10px;
+      }
+      .message strong {
+        display: block;
+      }
+      form.message-form {
+        display: flex;
+      }
+      form.message-form input[type="text"] {
+        flex: 1;
+        padding: 10px;
+        font-size: 1rem;
+      }
+      form.message-form button {
+        padding: 10px 20px;
+        font-size: 1rem;
+        margin-left: 5px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <a href="/chats" class="back">← Back to Chats</a>
     <h1>Chat with {{ other_user_name }}</h1>
     <div id="messages">
-        {% for msg in messages %}
-            <div class="message">
-                <strong>{{ msg.sender }}:</strong> {{ msg.text }}
-                <br>
-                <small>{{ msg.sent_datetime }}</small>
-            </div>
-        {% endfor %}
+      {% for msg in messages %}
+        <div class="message">
+          <strong>
+            {% if msg.sender_id == token | int %}
+              You
+            {% else %}
+              {{ msg.sender['username'] }}
+            {% endif %}
+          </strong>
+          <span>{{ msg.text }}</span>
+          <br>
+          <small>{{ msg.sent_datetime }}</small>
+        </div>
+      {% endfor %}
     </div>
-
-    <!-- Message sending form via websocket -->
-    <input id="messageInput" type="text" placeholder="Type your message" />
-    <button id="sendButton">Send</button>
-
-    <script>
-        const chatId = "{{ chat_id }}";
-        // Pass the token as a query parameter if needed; otherwise, handle token retrieval
-        const token = "YOUR_TOKEN_HERE"; 
-        const ws = new WebSocket(`ws://${window.location.host}/ws/chat/${chatId}?token=${token}`);
-
-        ws.onopen = function() {
-            console.log("WebSocket connected");
-        };
-
-        ws.onmessage = function(event) {
-            // Append new messages as they are received
-            const messagesDiv = document.getElementById("messages");
-            const newMsgDiv = document.createElement("div");
-            newMsgDiv.classList.add("message");
-            newMsgDiv.innerHTML = `<strong>New message:</strong> ${event.data}`;
-            messagesDiv.appendChild(newMsgDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        };
-
-        ws.onerror = function(event) {
-            console.error("WebSocket error:", event);
-        };
-
-        document.getElementById("sendButton").addEventListener("click", () => {
-            const input = document.getElementById("messageInput");
-            const message = input.value;
-            if (message) {
-                // Send the message through the websocket
-                ws.send(message);
-                input.value = "";
-            }
-        });
-    </script>
-</body>
+    <!-- The form submits a POST request to send a new message -->
+    <form class="message-form" action="/chat/{{ chat_id }}/message" method="post">
+      <input type="text" name="message" placeholder="Type your message" required />
+      <button type="submit">Send</button>
+    </form>
+  </body>
 </html>

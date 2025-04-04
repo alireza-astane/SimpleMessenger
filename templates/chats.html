@@ -16,8 +16,15 @@
       {% for chat in chats %}
         <div class="chat">
           <h2>{{ chat.name }}</h2>
-          <p>Last message at: {{ chat.last_message_time }}</p>
-          {% if chat.last_message %}
+          <p>
+            Last message at: 
+            {% if chat.last_message_time %}
+              {{ chat.last_message_time }}
+            {% else %}
+              N/A
+            {% endif %}
+          </p>
+          {% if chat.last_message and chat.last_message.text %}
             <p>Last Message: {{ chat.last_message.text }}</p>
           {% else %}
             <p>No messages yet.</p>
@@ -34,9 +41,8 @@
       <input type="text" name="recipient_username" placeholder="Enter username" required>
       <button type="submit">Create Chat</button>
     </form>
-      <form action="/chats/logout" method="post">
-        <button type="submit">Log Out</button>
-      </form>
+    <form action="/chats/logout" method="post">
+      <button type="submit">Log Out</button>
+    </form>
   </body>
 </html>
-
