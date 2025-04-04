@@ -14,7 +14,7 @@ from fastapi import (
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from jose import JWTError, jwt  # pip install python-jose[cryptography]
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 import logging
 import uvicorn
@@ -59,6 +59,16 @@ app = FastAPI()
 async def startup_event():
     # Create MongoDB indexes on startup
     await create_indexes()
+
+
+from kafka import KafkaProducer
+import json
+
+# Initialize a KafkaProducer (adjust bootstrap_servers accordingly)
+producer = KafkaProducer(
+    bootstrap_servers=["localhost:9092"],
+    value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+)
 
 
 # Helpers for password verification and token creation
@@ -294,65 +304,6 @@ async def create_chat(
     return RedirectResponse(url=f"/chat/{chat.id}", status_code=303)
 
 
-# # Example: serve an individual chat page (this uses SQLAlchemy in your old version;
-# # here you would query MongoDB for chat details and messages)
-# @app.get("/chat/{chat_id}")
-# async def chat_page(chat_id: str, request: Request):
-#     token = get_token_from_request(request)
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-#         user_id = payload.get("id")
-#         if user_id is None:
-#             raise HTTPException(status_code=401, detail="Invalid token")
-#     except JWTError:
-#         raise HTTPException(status_code=401, detail="Invalid token")
-#     # Retrieve chat details and messages from MongoDB
-
-#     # get all chats in database
-#     # cursor = chats_collection.find()
-#     # all_chats = await cursor.to_list(length=100)
-#     # LOG.info(f"{len(all_chats)}All chats: {all_chats} ")
-#     chat = await chats_collection.find_one({"id": UUID(chat_id)})
-#     # LOG.info(f"Chat: {chat} ")
-
-#     if not chat:
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     # Fetch messages for the chat
-#     cursor = messages_collection.find({"chat_id": UUID(chat_id)}).sort(
-#         "sent_datetime", 1
-#     )
-#     messages = await cursor.to_list(length=100)
-#     LOG.info(messages)
-#     # Determine other participant's name (requires additional query if needed)
-
-#     participants = chat.get("participants")
-#     if len(participants) < 2:
-#         raise HTTPException(status_code=400, detail="Not enough participants in chat")
-
-#     for participant in participants:
-#         # LOG.info(f"Participant: {str(participant),user_id } ")
-#         if str(participant) != user_id:
-#         other_user_id = participant
-#         break
-
-# other_user = await users_collection.find_one({"id": other_user_id})
-# if other_user:
-#     other_user_name = other_user.get("username")
-# else:
-#     # Fallback if user not found
-#     LOG.error(f"User with ID {other_user_id} not found.")
-
-# return templates.TemplateResponse(
-#     "chat.html",
-#     {
-#         "request": request,
-#         "chat_id": chat_id,
-#         "other_user_name": other_user_name,
-#         "messages": messages,
-#     },
-# )
-
-
 @app.get("/chat/{chat_id}", response_class=HTMLResponse)
 async def chat_page(chat_id: str, request: Request):
     token = get_token_from_request(request)
@@ -428,21 +379,33 @@ async def post_message(chat_id: str, message: str = Form(...), request: Request 
     if str(user_id) not in [str(p) for p in participants]:
         raise HTTPException(status_code=403, detail="Access denied to this chat")
 
-    # Create a new message using the MessageModel and insert it into MongoDB
-    new_message = MessageModel(
-        chat_id=chat_id,
-        sender_id=user_id,
-        sent_datetime=datetime.now(),
-        text=message,
-    )
-    await messages_collection.insert_one(new_message.dict())
+    # # Create a new message using the MessageModel and insert it into MongoDB
+    # new_message = MessageModel(
+    #     chat_id=chat_id,
+    #     sender_id=user_id,
+    #     sent_datetime=datetime.now(),
+    #     text=message,
+    # )
+    # await messages_collection.insert_one(new_message.dict())
 
-    # Update the chat's last_message_datetime if needed
-    await chats_collection.update_one(
-        {"id": UUID(chat_id)}, {"$set": {"last_message_datetime": datetime.now()}}
-    )
+    # # Update the chat's last_message_datetime if needed
+    # await chats_collection.update_one(
+    #     {"id": UUID(chat_id)}, {"$set": {"last_message_datetime": datetime.now()}}
+    # )
 
-    # Invalidate the Redis cache for this chat’s messages if applicable
+    # # Invalidate the Redis cache for this chat’s messages if applicable
     await redis_client.delete(f"chat:{chat_id}:messages")
+
+    # Prepare the message data.
+    message_data = {
+        "chat_id": chat_id,
+        "sender_id": user_id,
+        "sent_datetime": datetime.now().isoformat(),
+        "text": message,
+    }
+
+    # Publish the message data to a Kafka topic (e.g. "chat_messages")
+    producer.send("chat_messages", message_data)
+    producer.flush()  # Ensure the message is sent
 
     return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)

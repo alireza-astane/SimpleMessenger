@@ -1,0 +1,41 @@
+# this script in /home/astane/airflow/dags directory!!!
+
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
+import motor.motor_asyncio
+import asyncio
+
+# MongoDB configuration (adjust as needed)
+MONGO_DETAILS = "mongodb://localhost:27017/?uuidRepresentation=standard"
+client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_DETAILS)
+db = client.messenger
+
+
+async def count_messages():
+    count = await db.messages.count_documents({})
+    print(f"Total chat messages in database: {count}")
+
+
+def task_count_messages():
+    asyncio.run(count_messages())
+
+
+default_args = {
+    "owner": "messenger_app",
+    "depends_on_past": False,
+    "start_date": datetime(2025, 1, 1),
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
+}
+
+with DAG(
+    "chat_summary",
+    default_args=default_args,
+    schedule_interval="@daily",
+    catchup=False,
+) as dag:
+    summary_task = PythonOperator(
+        task_id="count_messages",
+        python_callable=task_count_messages,
+    )
