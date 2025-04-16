@@ -155,6 +155,105 @@ Messenger
 - Further secure the application (e.g., configuring HTTPS and secure token management).
 - Integrate Apache Airflow in production for robust scheduling and data maintenance tasks.
 
----
+## Deployment on AWS with Nginx
 
-This README should provide a comprehensive overview of your Messenger Chat Application and be useful both for developers working on the project and for those deploying it with Docker.
+Follow these steps to deploy the Messenger application on AWS using Nginx as a reverse proxy:
+
+### 1. Set Up an AWS EC2 Instance
+- Launch an EC2 instance with Ubuntu 22.04 LTS.
+- Configure security groups to allow ports 22 (SSH), 80 (HTTP), and 443 (HTTPS).
+- Connect to the instance via SSH.
+
+### 2. Install Required Software
+Run the following commands on the EC2 instance:
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y python3 python3-pip python3-venv nginx
+```
+
+### 3. Clone the Repository
+Clone the Messenger application repository:
+```bash
+git clone <your-repo-url> Messenger
+cd Messenger
+```
+
+### 4. Set Up a Virtual Environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 5. Test the Application
+Run the application locally:
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+Access it at `http://<your-ec2-public-ip>:8000`.
+
+### 6. Configure Nginx
+Create an Nginx configuration file:
+```bash
+sudo nano /etc/nginx/sites-available/messenger
+```
+Add the following:
+```nginx
+server {
+    listen 80;
+    server_name <your-ec2-public-ip>;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+Enable the configuration:
+```bash
+sudo ln -s /etc/nginx/sites-available/messenger /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### 7. Use `systemd` to Manage the Application
+Create a `systemd` service file:
+```bash
+sudo nano /etc/systemd/system/messenger.service
+```
+Add the following:
+```ini
+[Unit]
+Description=FastAPI app
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/Messenger
+ExecStart=/home/ubuntu/Messenger/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+Start and enable the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start messenger
+sudo systemctl enable messenger
+```
+
+### 8. Secure the Application with HTTPS (Optional)
+Install Certbot and obtain an SSL certificate:
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d <your-domain-name>
+sudo certbot renew --dry-run
+```
+
+### 9. Access the Application
+Visit `http://<your-ec2-public-ip>` or `https://<your-domain-name>` if HTTPS is configured.
