@@ -1,6 +1,7 @@
 import redis.asyncio as redis
 
 REDIS_HOST = "localhost"
+# REDIS_HOST = "messenger_redis"
 REDIS_PORT = 6379
 REDIS_DB = 0
 

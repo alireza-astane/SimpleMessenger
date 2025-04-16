@@ -1,0 +1,18 @@
+redis-server 
+
+mongod --dbpath /var/lib/mongo --port 27017
+
+docker compose up -d kafka zookeeper
+
+
+
+
+run: 
+
+python consumer.py
+
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+
+shutdown: 
+docker compose down

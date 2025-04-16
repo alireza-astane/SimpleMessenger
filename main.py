@@ -65,10 +65,31 @@ from kafka import KafkaProducer
 import json
 
 # Initialize a KafkaProducer (adjust bootstrap_servers accordingly)
-producer = KafkaProducer(
-    bootstrap_servers=["localhost:9092"],
-    value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-)
+from kafka import KafkaProducer
+import time
+
+
+def create_kafka_producer():
+    for _ in range(5):  # Retry up to 5 times
+        try:
+            producer = KafkaProducer(
+                bootstrap_servers=["localhost:9092"],  # kafka vs localhost
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            )
+            return producer
+        except Exception as e:
+            LOG.error(f"Kafka connection failed: {e}. Retrying in 5 seconds...")
+            time.sleep(5)
+    raise Exception("Failed to connect to Kafka after 5 retries")
+
+
+producer = create_kafka_producer()
+
+
+# producer = KafkaProducer(
+#     bootstrap_servers=["localhost:9092"],
+#     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+# )
 
 
 # Helpers for password verification and token creation
