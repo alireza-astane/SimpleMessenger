@@ -24,7 +24,6 @@ db = client.messenger
 async def process_message(message):
     data = message.value
     chat_id = data["chat_id"]
-    print(type(UUID(chat_id)))
     # Insert the message
     await db.messages.insert_one(
         {

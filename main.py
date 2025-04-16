@@ -400,20 +400,6 @@ async def post_message(chat_id: str, message: str = Form(...), request: Request 
     if str(user_id) not in [str(p) for p in participants]:
         raise HTTPException(status_code=403, detail="Access denied to this chat")
 
-    # # Create a new message using the MessageModel and insert it into MongoDB
-    # new_message = MessageModel(
-    #     chat_id=chat_id,
-    #     sender_id=user_id,
-    #     sent_datetime=datetime.now(),
-    #     text=message,
-    # )
-    # await messages_collection.insert_one(new_message.dict())
-
-    # # Update the chat's last_message_datetime if needed
-    # await chats_collection.update_one(
-    #     {"id": UUID(chat_id)}, {"$set": {"last_message_datetime": datetime.now()}}
-    # )
-
     # # Invalidate the Redis cache for this chat’s messages if applicable
     await redis_client.delete(f"chat:{chat_id}:messages")
 
@@ -430,3 +416,188 @@ async def post_message(chat_id: str, message: str = Form(...), request: Request 
     producer.flush()  # Ensure the message is sent
 
     return RedirectResponse(url=f"/chat/{chat_id}", status_code=303)
+
+
+@app.post("/API/signin")
+async def api_signin(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await get_user(form_data.username)
+    if not user or not verify_password(form_data.password, user.get("password")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.get("username"), "id": str(user.get("id"))},
+        expires_delta=access_token_expires,
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+from bson import ObjectId
+
+
+def serialize_mongo_document(document):
+    """Convert MongoDB document ObjectId fields to strings."""
+    if not document:
+        return document
+    for key, value in document.items():
+        if isinstance(value, ObjectId):
+            document[key] = str(value)
+    return document
+
+
+@app.post("/API/signup")
+async def api_signup(
+    username: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    if password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    existing_user = await users_collection.find_one({"username": username})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    hashed_password = get_password_hash(password)
+    user = UserModel(username=username, password=hashed_password)
+    await users_collection.insert_one(user.dict())
+    return {"message": "User created successfully"}
+
+
+@app.get("/API/chats")
+async def api_get_chats(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("id")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    cursor = user_chats_collection.find({"user_id": UUID(user_id)})
+    user_chats = await cursor.to_list(length=100)
+    chat_ids = [user_chat.get("chat_id") for user_chat in user_chats]
+
+    chat_data = []
+    for chat_id in chat_ids:
+        chat = await chats_collection.find_one({"id": chat_id})
+        if not chat:
+            continue
+        last_message = await messages_collection.find_one(
+            {"chat_id": chat_id}, sort=[("sent_datetime", -1)]
+        )
+        other_usernames = []
+        for participant in chat.get("participants", []):
+            if str(participant) != str(user_id):
+                user_doc = await users_collection.find_one({"id": participant})
+                if user_doc and user_doc.get("username"):
+                    other_usernames.append(user_doc.get("username"))
+        name = ", ".join(other_usernames) if other_usernames else "Unknown"
+
+        chat_data.append(
+            {
+                "id": str(chat.get("id")),
+                "name": name,
+                "last_message": serialize_mongo_document(last_message),
+                "last_message_time": chat.get("last_message_datetime"),
+            }
+        )
+
+    chat_data.sort(key=lambda x: x["last_message_time"], reverse=True)
+    return {"chats": chat_data}
+
+
+@app.post("/API/chats/create")
+async def api_create_chat(
+    recipient_username: str = Form(...), token: str = Depends(oauth2_scheme)
+):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        creator_id = payload.get("id")
+        if creator_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    recipient = await users_collection.find_one({"username": recipient_username})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    recipient_id = str(recipient.get("id"))
+
+    existing_chat = await chats_collection.find_one(
+        {"participants": {"$all": [creator_id, recipient_id]}}
+    )
+    if existing_chat:
+        return {"chat_id": str(existing_chat.get("id"))}
+
+    chat = ChatModel(
+        last_message_datetime=datetime.now(),
+        participants=[creator_id, recipient_id],
+    )
+    result = await chats_collection.insert_one(chat.dict())
+    chat_id = str(result.inserted_id)
+
+    for participant in [creator_id, recipient_id]:
+        user_chat = UserChatsModel(
+            user_id=participant,
+            chat_id=chat.id,
+            last_message_datetime=chat.last_message_datetime,
+        )
+        await user_chats_collection.insert_one(user_chat.dict())
+
+    return {"chat_id": chat.id}
+
+
+@app.get("/API/chat/{chat_id}")
+async def api_get_chat_messages(chat_id: str, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("id")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    chat = await chats_collection.find_one({"id": UUID(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    participants = chat.get("participants", [])
+    if str(user_id) not in [str(p) for p in participants]:
+        raise HTTPException(status_code=403, detail="Access denied to this chat")
+
+    cursor = messages_collection.find({"chat_id": UUID(chat_id)}).sort(
+        "sent_datetime", 1
+    )
+    messages = await cursor.to_list(length=100)
+    messages = [serialize_mongo_document(msg) for msg in messages]
+    return {"messages": messages}
+
+
+@app.post("/API/chat/{chat_id}/message")
+async def api_post_message(
+    chat_id: str, message: str = Form(...), token: str = Depends(oauth2_scheme)
+):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("id")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    chat = await chats_collection.find_one({"id": UUID(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    participants = chat.get("participants", [])
+    if str(user_id) not in [str(p) for p in participants]:
+        raise HTTPException(status_code=403, detail="Access denied to this chat")
+
+    message_data = {
+        "chat_id": chat_id,
+        "sender_id": user_id,
+        "sent_datetime": datetime.now().isoformat(),
+        "text": message,
+    }
+    producer.send("chat_messages", message_data)
+    producer.flush()
+    return {"message": "Message sent successfully"}
