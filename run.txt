@@ -1,20 +1,38 @@
+pre run:
+
 enable and start docker and docker.socket
-
 redis-server 
-
 sudo mongod --dbpath /var/lib/mongo --port 27017
-
 sudo docker compose up -d kafka zookeeper
-
-
 
 
 run: 
 
 python consumer.py
+uvicorn main:app --host 0.0.0.0 --port 8000
 
+shutdown: 
+
+docker compose down
+
+
+
+
+How to deploy on AWS:‌
+
+create a new EC2 instance with Ubuntu 20.04 LTS.
+install docker and docker-compose on the instance.
+install redis and mongodb on the instance.
+install python3 and pip on the instance.
+install the required python packages using pip and the requirements.txt file.
+create a new security group for the instance and allow inbound traffic on ports 8000, 27017, and 6379.
+clone the repository to the instance.
+enable and start docker and docker.socket
+run redis-server 
+sudo mongod --dbpath /var/lib/mongo --port 27017
+sudo docker compose up -d kafka zookeeper
+python consumer.py
 uvicorn main:app --host 0.0.0.0 --port 8000
 
 
-shutdown: 
-docker compose down
+
