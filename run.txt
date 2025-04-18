@@ -1,8 +1,10 @@
+enable and start docker and docker.socket
+
 redis-server 
 
 sudo mongod --dbpath /var/lib/mongo --port 27017
 
-docker compose up -d kafka zookeeper
+sudo docker compose up -d kafka zookeeper
 
 
 
