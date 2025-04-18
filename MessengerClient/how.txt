@@ -19,3 +19,13 @@ make
 # to build the AppImage:
 chmod +x build_appimage.sh
 ./build_appimage.sh
+
+
+# to build the windows .exe version:
+# install prerequisites
+cd ../
+rm -rf build-windows
+mkdir build-windows
+cd build-windows
+cmake .. -DCMAKE_TOOLCHAIN_FILE=/usr/share/mingw/toolchain-mingw64.cmake -DCMAKE_SYSTEM_NAME=Windows
+make

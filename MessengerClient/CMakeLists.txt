@@ -20,13 +20,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required Qt components
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Network)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
 
 # Enable debug output for qDebug()
 add_definitions(-DQT_MESSAGELOGCONTEXT)
-# Translation files
-set(TS_FILES MessengerClient_fa_IR.ts)
 
 # Headers and UI files
 set(HEADERS
@@ -45,7 +43,6 @@ set(PROJECT_SOURCES
     mainwindow.h
     apiclient.h
     mainwindow.ui
-    ${TS_FILES}
 )
 
 # Add executable
@@ -54,12 +51,10 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
     )
-    qt_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 else()
     add_executable(MessengerClient
         ${PROJECT_SOURCES}
     )
-    qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 endif()
 
 # Link libraries

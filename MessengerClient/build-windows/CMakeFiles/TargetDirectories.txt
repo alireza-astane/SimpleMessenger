@@ -1,0 +1,9 @@
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/MessengerClient.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/edit_cache.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/rebuild_cache.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/list_install_components.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/install.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/install/local.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/install/strip.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/MessengerClient_autogen_timestamp_deps.dir
+/home/astane/Desktop/DataBases/Messenger/MessengerClient/build-windows/CMakeFiles/MessengerClient_autogen.dir
