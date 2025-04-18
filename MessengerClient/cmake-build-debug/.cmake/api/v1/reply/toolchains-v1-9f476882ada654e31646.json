@@ -1,0 +1,78 @@
+{
+	"kind" : "toolchains",
+	"toolchains" : 
+	[
+		{
+			"compiler" : 
+			{
+				"id" : "GNU",
+				"implicit" : 
+				{
+					"includeDirectories" : 
+					[
+						"/home/astane/anaconda3/targets/x86_64-linux/include",
+						"/home/astane/anaconda3/include",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/include/c++/11.2.0",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/include/c++/11.2.0/x86_64-conda-linux-gnu",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/include/c++/11.2.0/backward",
+						"/home/astane/anaconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0/include",
+						"/home/astane/anaconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0/include-fixed",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/include",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/sysroot/usr/include"
+					],
+					"linkDirectories" : 
+					[
+						"/home/astane/anaconda3/targets/x86_64-linux/lib",
+						"/home/astane/anaconda3/targets/x86_64-linux/lib/stubs",
+						"/home/astane/anaconda3/lib",
+						"/home/astane/anaconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0",
+						"/home/astane/anaconda3/lib/gcc",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/lib64",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/sysroot/lib64",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/sysroot/usr/lib64",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/lib",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/sysroot/lib",
+						"/home/astane/anaconda3/x86_64-conda-linux-gnu/sysroot/usr/lib"
+					],
+					"linkFrameworkDirectories" : [],
+					"linkLibraries" : 
+					[
+						"stdc++",
+						"m",
+						"gcc_s",
+						"gcc",
+						"c",
+						"gcc_s",
+						"gcc"
+					]
+				},
+				"path" : "/home/astane/anaconda3/bin/x86_64-conda-linux-gnu-c++",
+				"version" : "11.2.0"
+			},
+			"language" : "CXX",
+			"sourceFileExtensions" : 
+			[
+				"C",
+				"M",
+				"c++",
+				"cc",
+				"cpp",
+				"cxx",
+				"m",
+				"mm",
+				"mpp",
+				"CPP",
+				"ixx",
+				"cppm",
+				"ccm",
+				"cxxm",
+				"c++m"
+			]
+		}
+	],
+	"version" : 
+	{
+		"major" : 1,
+		"minor" : 0
+	}
+}

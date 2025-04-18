@@ -1,0 +1,19 @@
+
+qtcreator  # to run qtcreator to edit the qt ui  
+
+pre run: # some how the openGl not working with conda 
+conda deactivate  
+
+
+
+# build and run the project
+cd ../
+rm -rf build
+mkdir build
+cd build
+cmake ..
+make
+./MessengerClient
+
+
+hi

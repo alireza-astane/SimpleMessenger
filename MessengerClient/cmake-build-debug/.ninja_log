@@ -1,0 +1,11 @@
+# ninja log v6
+1	255	1744810374199153316	MessengerClient_autogen/timestamp	64751545200a9390
+256	265	1744810374205740679	/home/astane/MessengerClient/cmake-build-debug/CMakeFiles/MessengerClient_fa_IR.ts_lst_file	2240b749c32b9ad3
+1	255	1744810374199153316	MessengerClient_autogen/mocs_compilation.cpp	64751545200a9390
+1	255	1744810374199153316	/home/astane/MessengerClient/cmake-build-debug/MessengerClient_autogen/timestamp	64751545200a9390
+1	255	1744810374199153316	/home/astane/MessengerClient/cmake-build-debug/MessengerClient_autogen/mocs_compilation.cpp	64751545200a9390
+266	2217	1744810374214153120	CMakeFiles/MessengerClient.dir/main.cpp.o	ee389a2d5f99e0d2
+266	2668	1744810374215341310	CMakeFiles/MessengerClient.dir/mainwindow.cpp.o	1854be44854ee26
+256	265	1744810374205740679	/home/astane/MessengerClient/MessengerClient_fa_IR.ts	2240b749c32b9ad3
+256	265	1744810374205740679	CMakeFiles/MessengerClient_fa_IR.ts_lst_file	2240b749c32b9ad3
+265	1942	1744810374213153133	CMakeFiles/MessengerClient.dir/MessengerClient_autogen/mocs_compilation.cpp.o	fc84d325ec37c68e
